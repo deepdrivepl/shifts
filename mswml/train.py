@@ -14,6 +14,7 @@ import numpy as np
 import random
 from metrics import dice_metric
 from data_load import get_train_dataloader, get_val_dataloader
+from tqdm import tqdm
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.')
 # trainining
@@ -84,7 +85,7 @@ def main(args):
     loss_function = DiceLoss(to_onehot_y=True, 
                              softmax=True, sigmoid=False,
                              include_background=False)
-    optimizer = torch.optim.Adam(model.parameters(), args.learning_rate)
+    optimizer = torch.optim.RAdam(model.parameters(), args.learning_rate)
     act = nn.Softmax(dim=1)
     
     epoch_num = args.n_epochs
@@ -94,19 +95,19 @@ def main(args):
     dice_weight = 0.5
     focal_weight = 1.0
     roi_size = (96, 96, 96)
-    sw_batch_size = 4
+    sw_batch_size = 8
     
     best_metric, best_metric_epoch = -1, -1
     epoch_loss_values, metric_values = [], []
 
     ''' Training loop '''
     for epoch in range(epoch_num):
-        print("-" * 10)
-        print(f"epoch {epoch + 1}/{epoch_num}")
+        # print("-" * 10)
+        # print(f"epoch {epoch + 1}/{epoch_num}")
         model.train()
         epoch_loss = 0
         step = 0
-        for batch_data in train_loader:
+        for batch_data in tqdm(train_loader,desc='Epoch %d/%d'%(epoch+1,epoch_num)):
             n_samples = batch_data["image"].size(0)
             for m in range(0,batch_data["image"].size(0), 2):
                 step += 2
@@ -132,7 +133,7 @@ def main(args):
                 epoch_loss += loss.item()
                 if step % 100 == 0:
                     step_print = int(step/2)
-                    print(f"{step_print}/{(len(train_loader)*n_samples) // (train_loader.batch_size*2)}, train_loss: {loss.item():.4f}")
+                #     print(f"{step_print}/{(len(train_loader)*n_samples) // (train_loader.batch_size*2)}, train_loss: {loss.item():.4f}")
 
         epoch_loss /= step_print
         epoch_loss_values.append(epoch_loss)
@@ -144,7 +145,7 @@ def main(args):
             with torch.no_grad():
                 metric_sum = 0.0
                 metric_count = 0
-                for val_data in val_loader:
+                for val_data in tqdm(val_loader):
                     val_inputs, val_labels = (
                         val_data["image"].to(device),
                         val_data["label"].to(device)
