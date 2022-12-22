@@ -12,7 +12,7 @@ from monai.transforms import (
     RandRotate90d, RandShiftIntensityd, RandAffined, RandSpatialCropd,
     RandScaleIntensityd)
 from scipy import ndimage
-
+import torch
 
 def get_train_transforms():
     """ Get transforms for training on FLAIR images and ground truth:
@@ -67,7 +67,7 @@ def get_val_transforms(keys=["image", "label"], image_keys=["image"]):
     )
 
 
-def get_train_dataloader(flair_path, gts_path, num_workers, cache_rate=0.1):
+def get_train_dataloader(flair_path, gts_path, num_workers, batch_size=1, cache_rate=0.1):
     """
     Get dataloader for training 
     Args:
@@ -85,13 +85,17 @@ def get_train_dataloader(flair_path, gts_path, num_workers, cache_rate=0.1):
     segs = sorted(glob(os.path.join(gts_path, "*gt_isovox.nii.gz")),
                   key=lambda i: int(re.sub('\D', '', i)))  # Collect all corresponding ground truths
 
+    # multiply the dataset !!!!
+    flair = sum([flair for _ in range(10)], [])
+    segs = sum([segs for _ in range(10)], [])
+
     files = [{"image": fl, "label": seg} for fl, seg in zip(flair, segs)]
 
     print("Number of training files:", len(files))
 
     ds = CacheDataset(data=files, transform=get_train_transforms(),
                       cache_rate=cache_rate, num_workers=num_workers)
-    return DataLoader(ds, batch_size=1, shuffle=True,
+    return DataLoader(ds, batch_size=batch_size, shuffle=True,
                       num_workers=num_workers)
 
 

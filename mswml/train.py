@@ -12,9 +12,11 @@ from monai.losses import DiceLoss
 from monai.networks.nets import UNet
 import numpy as np
 import random
-from metrics import dice_metric
+from metrics import *
 from data_load import get_train_dataloader, get_val_dataloader
 from tqdm import tqdm
+from torch.utils.tensorboard import SummaryWriter
+
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.')
 # trainining
@@ -42,6 +44,10 @@ parser.add_argument('--val_interval', type=int, default=5,
                     help='Validation every n-th epochs')
 parser.add_argument('--threshold', type=float, default=0.4, 
                     help='Probability threshold')
+parser.add_argument('--tb_logs', type=str, default='./runs/', 
+                    help='TensorBoard logs directory')
+parser.add_argument('--exp_name', type=str,
+                    help='Experiment name')
 
 
 def get_default_device():
@@ -63,7 +69,9 @@ def main(args):
     device = get_default_device()
     torch.multiprocessing.set_sharing_strategy('file_system')
 
-    path_save = args.path_save
+    path_save = args.tb_logs + args.exp_name # args.path_save
+
+    writer = SummaryWriter(args.tb_logs + args.exp_name)
     
     '''' Initialise dataloaders '''
     train_loader = get_train_dataloader(flair_path=args.path_train_data, 
@@ -115,8 +123,10 @@ def main(args):
                     batch_data["image"][m:(m+2)].to(device),
                     batch_data["label"][m:(m+2)].type(torch.LongTensor).to(device))
                 optimizer.zero_grad()
+                print('Inputs', inputs.min(), inputs.max(), inputs.dtype)
+                print('Labels', labels.min(), labels.max(), labels.dtype)
                 outputs = model(inputs)
-                
+                print('Outputs', outputs.min(), outputs.max(), outputs.dtype)
                 # Dice loss
                 loss1 = loss_function(outputs, labels)
                 # Focal loss
@@ -125,7 +135,8 @@ def main(args):
                 pt = torch.exp(-ce)
                 loss2 = (1 - pt)**gamma_focal * ce 
                 loss2 = torch.mean(loss2)
-                loss = dice_weight * loss1 + focal_weight * loss2              
+                loss = dice_weight * loss1 + focal_weight * loss2     
+                print(loss1, loss2, loss)         
                 
                 loss.backward()
                 optimizer.step()
@@ -137,7 +148,8 @@ def main(args):
 
         epoch_loss /= step_print
         epoch_loss_values.append(epoch_loss)
-        print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
+        # print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
+        writer.add_scalar('Train/Loss', epoch_loss, epoch + 1)
         
         ''' Validation '''
         if (epoch + 1) % val_interval == 0:
@@ -177,6 +189,7 @@ def main(args):
                 print(f"current epoch: {epoch + 1} current mean dice: {metric:.4f}"
                                     f"\nbest mean dice: {best_metric:.4f} at epoch: {best_metric_epoch}"
                                     )
+                writer.add_scalar('Val/Dice', metric, epoch + 1)
  
           
 #%%

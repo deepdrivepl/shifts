@@ -146,19 +146,20 @@ def ndsc_retention_curve(ground_truth, predictions, uncertainties, fracs_retaine
             (preds_[:pos], gts_[pos:]))
         return dice_norm_metric(gts_, curr_preds)
 
-    if parallel_backend is None:
-        parallel_backend = Parallel(n_jobs=1)
+    # if parallel_backend is None:
+    #     parallel_backend = Parallel(n_jobs=1)
 
     ordering = uncertainties.argsort()
     gts = ground_truth[ordering].copy()
     preds = predictions[ordering].copy()
     N = len(gts)
 
-    process = partial(compute_dice_norm, preds_=preds, gts_=gts, N_=N)
-    dsc_norm_scores = np.asarray(
-        parallel_backend(delayed(process)(frac)
-                         for frac in fracs_retained)
-    )
+    # process = partial(compute_dice_norm, preds_=preds, gts_=gts, N_=N)
+    # dsc_norm_scores = np.asarray(
+    #     parallel_backend(delayed(process)(frac)
+    #                      for frac in fracs_retained)
+    # )
+    dsc_norm_scores = np.asarray([compute_dice_norm(preds_=preds, gts_=gts, N_=N, frac_=frac) for frac in fracs_retained])
 
     return dsc_norm_scores
 
