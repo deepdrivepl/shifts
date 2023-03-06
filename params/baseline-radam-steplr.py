@@ -6,11 +6,11 @@ PARAMS = {
 
     # trainining
     'n_epochs': 300,
-    'accumulate_grad_batches': None,
-    'batch_size': 2,
+    'accumulated_batch_size': 16,
+    'batch_size': 8,
     
     'optimizer': torch.optim.RAdam,
-    'optimizer_params': {'lr': 1e-5},
+    'optimizer_params': {'lr': 1e-3},
     'scheduler': torch.optim.lr_scheduler.StepLR,
     'scheduler_params': {'step_size': 3, 'gamma': 0.9},
     'monitor': None,
@@ -27,25 +27,30 @@ PARAMS = {
     'thresh': 0.4,
     'iou_thresh': 0.25,
     'n_jobs': 4,
+    'fracs_num_points': 50,
+    'fracs_multiplier': 4,
     
     # data
-    'path_train_data': "/mnt/12TB/projects/shifts2022/data/shifts_ms_pt1/msseg/train/flair",
-    'path_train_gts': "/mnt/12TB/projects/shifts2022/data/shifts_ms_pt1/msseg/train/gt",
-    'path_val_data': "/mnt/12TB/projects/shifts2022/data/shifts_ms_pt1/msseg/eval_in/flair",
-    'path_val_gts': "/mnt/12TB/projects/shifts2022/data/shifts_ms_pt1/msseg/eval_in/gt",
-    'path_val_brain_masks': "/mnt/12TB/projects/shifts2022/data/shifts_ms_pt1/msseg/eval_in/fg_mask",
-    'num_workers': 0,
+    'path_train_data': ["data/shifts_ms_pt1/msseg/train/flair", "data/shifts_ms_pt2/best/train/flair"],
+    'path_train_gts': ["data/shifts_ms_pt1/msseg/train/gt", "data/shifts_ms_pt2/best/train/gt"],
+    'path_devin_data': ["data/shifts_ms_pt1/msseg/dev_in/flair", "data/shifts_ms_pt2/best/dev_in/flair"],
+    'path_devin_gts': ["data/shifts_ms_pt1/msseg/dev_in/gt", "data/shifts_ms_pt2/best/dev_in/gt"],
+    'path_devin_brain_masks': ["data/shifts_ms_pt1/msseg/dev_in/fg_mask", "data/shifts_ms_pt2/best/dev_in/fg_mask"],
+    'path_evalin_data': ["data/shifts_ms_pt1/msseg/eval_in/flair", "data/shifts_ms_pt2/best/eval_in/flair"],
+    'path_evalin_gts': ["data/shifts_ms_pt1/msseg/eval_in/gt", "data/shifts_ms_pt2/best/eval_in/gt"],
+    'path_evalin_brain_masks': ["data/shifts_ms_pt1/msseg/eval_in/fg_mask", "data/shifts_ms_pt2/best/eval_in/fg_mask"],
+    'num_workers': 20,
 
     # logging
     'val_interval': 1,
     'threshold': 0.4,
     'tb_logs': './runs',
     'exp_name': 'baseline-radam-steplr',
-    'ckpt_monitor': 'val/dice_loss',
+    'ckpt_monitor': 'val-dev_in/dice_loss',
 
     # initialisation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
     'seed': 42,
-    'num_gpus': 1,
+    'num_gpus': 2,
 
     # model
     'model_name': 'UNet',

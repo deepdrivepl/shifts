@@ -5,12 +5,12 @@ from monai.losses import DiceLoss
 PARAMS = {
 
     # trainining
-    'n_epochs': 300,
-    'accumulated_batch_size': 32,
+    'n_epochs': 3,
+    'accumulated_batch_size': 16,
     'batch_size': 8,
     
     'optimizer': torch.optim.RAdam,
-    'optimizer_params': {'lr': 3e-3},
+    'optimizer_params': {'lr': 1e-3},
     'scheduler': None,
     'scheduler_params': None,
     'monitor': None,
@@ -40,10 +40,11 @@ PARAMS = {
     'val_interval': 1,
     'threshold': 0.4,
     'tb_logs': './runs',
-    'exp_name': 'baseline-radam',
+    'exp_name': 'profiler',
     'ckpt_monitor': 'val/dice_loss',
+    'profiler_fname': 'profiler',
 
-    # initialisation
+    # initialisation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
     'seed': 42,
     'num_gpus': 2,
 
