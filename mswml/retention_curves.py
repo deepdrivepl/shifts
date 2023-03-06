@@ -7,27 +7,32 @@ import os
 import torch
 from joblib import Parallel
 from monai.inferers import sliding_window_inference
-from monai.networks.nets import UNet
+# from monai.networks.nets import UNet
 import numpy as np
-from data_load import remove_connected_components, get_val_dataloader
+from data_load import remove_connected_components, get_val_dataloader, get_val_transforms
 from metrics import ndsc_retention_curve
 from uncertainty import ensemble_uncertainties_classification
 import matplotlib.pyplot as plt
-import seaborn as sns; sns.set_theme()
+import seaborn as sns
+sns.set(style='white', font_scale=1.5)
 from sklearn import metrics
+from tqdm import tqdm
+
+from x_unet import XUnet
+from monai.networks.nets import UNet
+from collections import OrderedDict, defaultdict
+  
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.')
 # model
-parser.add_argument('--num_models', type=int, default=3,
-                    help='Number of models in ensemble')
 parser.add_argument('--path_model', type=str, default='',
-                    help='Specify the dir to al the trained models')
+                    help='Specify the path to the trained model')
 # data
-parser.add_argument('--path_data', type=str, required=True,
+parser.add_argument('--path_data', nargs='+', required=True,
                     help='Specify the path to the directory with FLAIR images')
-parser.add_argument('--path_gts', type=str, required=True,
+parser.add_argument('--path_gts', nargs='+', required=True,
                     help='Specify the path to the directory with ground truth binary masks')
-parser.add_argument('--path_bm', type=str, required=True,
+parser.add_argument('--path_bm', nargs='+', required=True,
                     help='Specify the path to the directory with brain masks')
 # parallel computation
 parser.add_argument('--num_workers', type=int, default=1,
@@ -37,10 +42,10 @@ parser.add_argument('--n_jobs', type=int, default=1,
 # hyperparameters
 parser.add_argument('--threshold', type=float, default=0.35,
                     help='Probability threshold')
-# save dir
+# other
 parser.add_argument('--path_save', type=str, required=True,
-                    help='Specify the path to the directory where retention \
-                    curves will be saved')
+                    help='Specify the path to the directory where retention curves will be saved')
+parser.add_argument('--plot_title', type=str, default='')
 
 
 def get_default_device():
@@ -58,66 +63,81 @@ def main(args):
     torch.multiprocessing.set_sharing_strategy('file_system')
 
     '''' Initialise dataloaders '''
-    val_loader = get_val_dataloader(flair_path=args.path_data,
-                                    gts_path=args.path_gts,
+    val_loader = get_val_dataloader(flair_paths=args.path_data,
+                                    gts_paths=args.path_gts,
                                     num_workers=args.num_workers,
-                                    bm_path=args.path_bm)
+                                    bm_paths=args.path_bm,
+                                    transforms=get_val_transforms)
 
-    ''' Load trained models  '''
-    K = args.num_models
-    models = []
-    for i in range(K):
-        models.append(UNet(
-            spatial_dims=3,
-            in_channels=1,
-            out_channels=2,
-            channels=(32, 64, 128, 256, 512),
-            strides=(2, 2, 2, 2),
-            num_res_units=0).to(device)
-                      )
+    ''' Load trained model  '''
+    model = XUnet(dim = 64,
+                 frame_kernel_size = 3,
+                 channels = 1,
+                 out_dim = 2,
+                 attn_dim_head = 32,
+                 attn_heads = 8,
+                 dim_mults = (1, 2, 4, 8),
+                 num_blocks_per_stage = (2, 2, 2, 2),
+                 num_self_attn_per_stage = (0, 0, 0, 1),
+                 nested_unet_depths = (5, 4, 2, 1),
+                 consolidate_upsample_fmaps = True,
+                 weight_standardize = False)
+    roi_size = (64, 64, 64)
+    sw_batch_size = 4
 
-    for i, model in enumerate(models):
-        model.load_state_dict(torch.load(os.path.join(args.path_model,
-                                                      f"seed{i + 1}",
-                                                      "Best_model_finetuning.pth")))
-        model.eval()
+    # model = UNet(spatial_dims = 3,
+    #              in_channels = 1,
+    #              out_channels =2,
+    #              channels = (32, 64, 128, 256, 512),
+    #              strides = (2, 2, 2, 2),
+    #              num_res_units = 0)
+    # roi_size = (96, 96, 96)
+    # sw_batch_size = 8
+
+    checkpoint = torch.load(args.path_model, map_location=device)
+    checkpoint = OrderedDict({k.replace('model.', '', 1):v for k,v in checkpoint['state_dict'].items()})
+    model.load_state_dict(checkpoint)
+
+    if device == torch.device('cuda'):
+        model.half()
+
+    model.to(device)
+    model.eval()
 
     act = torch.nn.Softmax(dim=1)
-    th = args.threshold
-    roi_size = (96, 96, 96)
-    sw_batch_size = 4
 
     # Significant class imbalance means it is important to use logspacing between values
     # so that it is more granular for the higher retention fractions
     fracs_retained = np.log(np.arange(200 + 1)[1:])
     fracs_retained /= np.amax(fracs_retained)
 
-    ndsc_rc = []
+    # uncertainties = ['confidence', 'entropy_of_expected', 'expected_entropy', 'mutual_information', 'epkl', 'reverse_mutual_information']
+    uncs_dict = defaultdict(list)
 
     ''' Evaluatioin loop '''
     with Parallel(n_jobs=args.n_jobs) as parallel_backend:
         with torch.no_grad():
-            for count, batch_data in enumerate(val_loader):
+            for count, batch_data in tqdm(enumerate(val_loader)):
                 inputs, gt, brain_mask = (
-                    batch_data["image"].to(device),
+                    batch_data["image"],
                     batch_data["label"].cpu().numpy(),
                     batch_data["brain_mask"].cpu().numpy()
                 )
-                # get ensemble predictions
-                all_outputs = []
-                for model in models:
-                    outputs = sliding_window_inference(inputs, roi_size,
-                                                       sw_batch_size, model,
-                                                       mode='gaussian')
-                    outputs = act(outputs).cpu().numpy()
-                    outputs = np.squeeze(outputs[0, 1])
-                    all_outputs.append(outputs)
-                all_outputs = np.asarray(all_outputs)
+
+                if device == torch.device('cuda'):
+                    inputs = inputs.half()
+
+                # get predictions
+                outputs = sliding_window_inference(inputs.to(device), roi_size,
+                                                   sw_batch_size, model,
+                                                   mode='gaussian')
+                outputs = act(outputs).cpu().numpy().astype(np.float32)
+                outputs = np.squeeze(outputs[0, 1])
 
                 # obtain binary segmentation mask
-                seg = np.mean(all_outputs, axis=0)
-                seg[seg >= th] = 1
-                seg[seg < th] = 0
+                seg = outputs.copy()
+                seg[seg >= args.threshold] = 1
+                seg[seg < args.threshold] = 0
                 seg = np.squeeze(seg)
                 seg = remove_connected_components(seg)
 
@@ -125,29 +145,35 @@ def main(args):
                 brain_mask = np.squeeze(brain_mask)
 
                 # compute reverse mutual information uncertainty map
-                uncs_map = ensemble_uncertainties_classification(np.concatenate(
-                    (np.expand_dims(all_outputs, axis=-1),
-                     np.expand_dims(1. - all_outputs, axis=-1)),
-                    axis=-1))['reverse_mutual_information']
+                uncs = ensemble_uncertainties_classification(np.concatenate(
+                    (np.expand_dims(outputs, axis=(0,-1)),
+                     np.expand_dims(1. - outputs, axis=(0,-1))),
+                    axis=-1))
 
                 # compute metrics
-                ndsc_rc += [ndsc_retention_curve(ground_truth=gt[brain_mask == 1].flatten(),
-                                                 predictions=seg[brain_mask == 1].flatten(),
-                                                 uncertainties=uncs_map[brain_mask == 1].flatten(),
-                                                 fracs_retained=fracs_retained,
-                                                 parallel_backend=parallel_backend)]
+                for k in uncs.keys():
+                    ndsc_rc = ndsc_retention_curve(ground_truth=gt[brain_mask == 1].flatten(),
+                                                   predictions=seg[brain_mask == 1].flatten(),
+                                                   uncertainties=uncs[k][brain_mask == 1].flatten(),
+                                                   fracs_retained=fracs_retained,
+                                                   parallel_backend=parallel_backend)
+                    uncs_dict[k].append(ndsc_rc)
 
-    ndsc_rc = np.asarray(ndsc_rc)
-    y = np.mean(ndsc_rc, axis=0)
-    np.save(os.path.join(args.path_save, 'nDSC_rc.npy'), y)
+    plt.figure(figsize=(20,12))
 
-    plt.plot(fracs_retained, y,
-             label=f"nDSC R-AUC: {1. - metrics.auc(fracs_retained, y):.4f}")
+    for k in uncs_dict.keys():
+        ndsc_rc = np.asarray(uncs_dict[k])
+        y = np.mean(ndsc_rc, axis=0)
+        np.save(os.path.join(args.path_save, 'nDSC_rc_' + k + '.npy'), y)
+
+        plt.plot(fracs_retained, y, label=f"{k}: {1. - metrics.auc(fracs_retained, y):.4f}")
+        
     plt.xlabel("Retention Fraction")
     plt.ylabel("nDSC")
-    plt.xlim([0.0, 1.01])
-    plt.legend()
-    plt.savefig(os.path.join(args.path_save, 'nDSC_RC_RMIuncs.jpg'))
+    plt.xlim([0.0, 1.0])
+    plt.title(args.plot_title)
+    plt.legend(title='nDSC R-AUC')
+    plt.savefig(os.path.join(args.path_save, 'nDSC_rc.jpg'))
     plt.clf()
 
 
