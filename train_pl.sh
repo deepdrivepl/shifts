@@ -139,4 +139,35 @@
 
 # input size - once again
 # python mswml/train_pl.py params/xunet-size-base-1.py
-python mswml/train_pl.py params/xunet-size-128-1.py
+# python mswml/train_pl.py params/xunet-size-128-1.py
+# python mswml/train_pl.py params/xunet-size-128-2.py
+# python mswml/train_pl.py params/xunet-size-128-3.py # crop first to 160
+# python mswml/train_pl.py params/xunet-size-128-4.py # pct start 10%
+# python mswml/train_pl.py params/xunet-size-128-5.py # final div factor
+
+
+
+# unet vs u2net vs xunet
+# python mswml/train_pl.py params/xmodel-base-unet.py
+# python mswml/train_pl.py params/xmodel-base-u2net.py
+# python mswml/train_pl.py params/xmodel-base-xunet.py
+# python mswml/train_pl.py params/xmodel-base-unet-monai.py
+
+
+# model soup
+# python mswml/train_pl.py params/model-soup-0.py
+# python mswml/train_pl.py params/model-soup-1.py
+# python mswml/train_pl.py params/model-soup-2.py
+# python mswml/train_pl.py params/model-soup-3.py
+# python mswml/train_pl.py params/model-soup-4.py
+
+
+# longer loss exp
+# python mswml/train_pl.py params/xunet-loss-ndsc-lr-1.py
+# python mswml/train_pl.py params/xunet-loss-ndsc-lr-2.py # adjust pct start
+# python mswml/train_pl.py params/xunet-loss-ndsc-lr-3.py # lr*0.1
+
+
+# scale loss by the factor related to wml percantage in a sample
+# python mswml/train_pl.py params/xunet-wml-percentage.py
+python mswml/train_pl.py params/xunet-wml-percentage-1.py
