@@ -22,7 +22,7 @@ PARAMS = dict(
     optimizer=torch.optim.RAdam,
     optimizer_params=dict(lr=1e-3),
     scheduler=torch.optim.lr_scheduler.OneCycleLR,
-    scheduler_params=dict(max_lr=1e-4, div_factor=10, final_div_factor=300, pct_start=0.02),
+    scheduler_params=dict(max_lr=1e-5, div_factor=10, final_div_factor=300, pct_start=0.02),
     monitor=None,
 
     # loss
@@ -124,7 +124,7 @@ def get_train_transforms():
             RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
             RandCropByPosNegLabeld(keys=["image", "label"],
                                    label_key="label", image_key="image",
-                                   spatial_size=(128, 128, 128), num_samples=1,
+                                   spatial_size=(150, 150, 150), num_samples=1,
                                    pos=4, neg=1),
             RandSpatialCropd(keys=["image", "label"],
                              roi_size=(128, 128, 128),

@@ -22,7 +22,7 @@ PARAMS = dict(
     optimizer=torch.optim.RAdam,
     optimizer_params=dict(lr=1e-3),
     scheduler=torch.optim.lr_scheduler.OneCycleLR,
-    scheduler_params=dict(max_lr=1e-4, div_factor=10, final_div_factor=300, pct_start=0.02),
+    scheduler_params=dict(max_lr=1e-5, div_factor=10, final_div_factor=300, pct_start=0.1),
     monitor=None,
 
     # loss

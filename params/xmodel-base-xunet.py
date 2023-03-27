@@ -17,7 +17,7 @@ PARAMS = dict(
     # trainining
     n_epochs=50,
     accumulated_batch_size=6,
-    batch_size=1,
+    batch_size=6,
     
     optimizer=torch.optim.RAdam,
     optimizer_params=dict(lr=1e-3),
@@ -33,7 +33,7 @@ PARAMS = dict(
 
     # validation
     sw_batch_size=2,
-    roi_size=(128, 128, 128),
+    roi_size=(64, 64, 64),
     thresh=0.4,
     iou_thresh=0.25,
     n_jobs=4,
@@ -55,11 +55,11 @@ PARAMS = dict(
     #num_workers=40,
     num_workers=20,
     cache_rate=0.1,
-    multiply_train=30,
+    multiply_train=40,
 
     # logging
-    tb_logs='./runs/size',
-    exp_name='xunet-size-128',
+    tb_logs='./runs/xmodel',
+    exp_name='xmodel-xunet-base',
     ckpt_monitor='val-eval_in/dice_loss',
     num_images_val=2,
     log_gif_interval=5,
@@ -77,13 +77,13 @@ PARAMS = dict(
     model_params=dict(dim = 64,
                       frame_kernel_size = 3,                 # set this to greater than 1;
                       channels = 1,
-                      out_dim = 2,
-                      attn_dim_head = 16,
+                      out_dim=2,
+                      attn_dim_head = 32,
                       attn_heads = 8,
-                      dim_mults = (1, 2, 3, 4, 5),
-                      num_blocks_per_stage = (1, 1, 1, 1, 1),
-                      num_self_attn_per_stage = (0, 0, 0, 0, 1),
-                      nested_unet_depths = (6, 5, 4, 3, 2),     # nested unet depths, from unet-squared paper
+                      dim_mults = (1, 2, 4, 8),
+                      num_blocks_per_stage = (2, 2, 2, 2),
+                      num_self_attn_per_stage = (0, 0, 0, 1),
+                      nested_unet_depths = (5, 4, 2, 1),     # nested unet depths, from unet-squared paper
                       consolidate_upsample_fmaps = True,     # whether to consolidate outputs from all upsample blocks, used in unet-squared paper
                       weight_standardize = False
                       #weight_standardize = True
@@ -134,7 +134,7 @@ def get_train_transforms():
             RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(1, 2)),
             RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 2)),
             RandAffined(keys=['image', 'label'], mode=('bilinear', 'nearest'),
-                        prob=1.0, spatial_size=(128, 128, 128),
+                        prob=1.0, spatial_size=(64, 64, 64),
                         rotate_range=(np.pi / 2, np.pi / 2, np.pi / 2),
                         scale_range=(0.3, 0.3, 0.3), padding_mode='border'),
             ScaleIntensityd(keys="image"),
