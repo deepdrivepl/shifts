@@ -1,4 +1,5 @@
-FROM pytorch/pytorch
+# FROM pytorch/pytorch
+FROM nvcr.io/nvidia/pytorch:22.12-py3
 
 RUN groupadd -r algorithm && useradd -m --no-log-init -r -g algorithm algorithm
 
@@ -14,13 +15,10 @@ ENV PATH="/home/algorithm/.local/bin:${PATH}"
 RUN python -m pip install --user -U pip
 
 COPY --chown=algorithm:algorithm requirements.txt /opt/algorithm/
-# RUN python -m pip install --user -rrequirements.txt
-RUN python -m pip install --user x-unet
+RUN python -m pip install --user -r requirements.txt
 
 COPY --chown=algorithm:algorithm process.py /opt/algorithm/
-# COPY --chown=algorithm:algorithm uncertainty.py /opt/algorithm/
-# COPY --chown=algorithm:algorithm model1.pth /opt/algorithm/model1.pth
-# COPY --chown=algorithm:algorithm model2.pth /opt/algorithm/model2.pth
-# COPY --chown=algorithm:algorithm model3.pth /opt/algorithm/model3.pth
+COPY --chown=algorithm:algorithm uncertainty.py /opt/algorithm/
+COPY --chown=algorithm:algorithm models/xunet-loss-ndsc-lr.ckpt /opt/algorithm/model.ckpt
 
 ENTRYPOINT python -m process $0 $@
