@@ -25,6 +25,7 @@ from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers.tensorboard import TensorBoardLogger
 
 import importlib
+from collections import OrderedDict
 
 
 def compute_metrics(labels, outputs, threshold, iou_threshold, n_jobs=None):
@@ -194,6 +195,9 @@ class LitModule(pl.LightningModule):
         loss_dict = self.loss_function(outputs, labels)
         self.log('train/loss', loss_dict['loss'], batch_size=self.params["batch_size"])
         
+        if isinstance(outputs, tuple):
+            outputs = outputs[0]
+
         metrics_dict = compute_metrics(labels.detach(), outputs.detach(), self.params["thresh"], self.params["iou_thresh"], self.params["n_jobs"])
         loss_dict.update(metrics_dict)
 
@@ -321,6 +325,11 @@ def main(params_path, params_module):
     ''' Initialise the model '''
     model = params_module.model
     loss_function = params_module.loss_function
+
+    if params_module.PARAMS.get('ckpt', None):
+        checkpoint = torch.load(params_module.PARAMS['ckpt'], map_location='cpu')
+        checkpoint = OrderedDict({k.replace('model.', '', 1):v for k,v in checkpoint['state_dict'].items()})
+        model.load_state_dict(checkpoint)
 
     lit_module = LitModule(params_module.PARAMS, model, loss_function)
 
