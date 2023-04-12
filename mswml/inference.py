@@ -17,9 +17,8 @@ import numpy as np
 from data_load import remove_connected_components, get_flair_dataloader, get_val_transforms
 from uncertainty import ensemble_uncertainties_classification
 
-from x_unet import XUnet
-from monai.networks.nets import UNet
 from collections import OrderedDict
+import importlib
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.')
 # save options
@@ -28,6 +27,8 @@ parser.add_argument('--path_pred', type=str, required=True,
 # model
 parser.add_argument('--path_model', type=str, default='',
                     help='Specify the dir to all the trained models')
+parser.add_argument('--path_params', type=str, default='',
+                    help='Specify the path to the model params')
 # data
 parser.add_argument('--path_data', nargs='+', required=True,
                     help='Specify the path to the directory with FLAIR images')
@@ -57,36 +58,21 @@ def main(args):
     device = get_default_device()
     torch.multiprocessing.set_sharing_strategy('file_system')
 
+    spec = importlib.util.spec_from_file_location("params", args.path_params)
+    params = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(params)
+
     '''' Initialise dataloaders '''
     val_loader = get_flair_dataloader(flair_paths=args.path_data,
                                       num_workers=args.num_workers,
                                       bm_paths=args.path_bm,
-                                      transforms=get_val_transforms)
+                                      transforms=params.get_val_transforms)
 
     ''' Load trained models  '''
-    model = XUnet(dim = 64,
-                 frame_kernel_size = 3,
-                 channels = 1,
-                 out_dim = 2,
-                 attn_dim_head = 32,
-                 attn_heads = 8,
-                 dim_mults = (1, 2, 4, 8),
-                 num_blocks_per_stage = (2, 2, 2, 2),
-                 num_self_attn_per_stage = (0, 0, 0, 1),
-                 nested_unet_depths = (5, 4, 2, 1),
-                 consolidate_upsample_fmaps = True,
-                 weight_standardize = False)
-    roi_size = (64, 64, 64)
-    sw_batch_size = 4
+    model = params.model
 
-    # model = UNet(spatial_dims = 3,
-    #              in_channels = 1,
-    #              out_channels =2,
-    #              channels = (32, 64, 128, 256, 512),
-    #              strides = (2, 2, 2, 2),
-    #              num_res_units = 0)
-    # roi_size = (96, 96, 96)
-    # sw_batch_size = 8
+    roi_size = params.PARAMS['roi_size']
+    sw_batch_size = 4
 
     checkpoint = torch.load(args.path_model, map_location=device)
     checkpoint = OrderedDict({k.replace('model.', '', 1):v for k,v in checkpoint['state_dict'].items()})
