@@ -11,21 +11,24 @@ from tqdm import tqdm
 import torch
 from joblib import Parallel
 from monai.inferers import sliding_window_inference
-# from monai.networks.nets import UNet
+from monai.transforms import CropForeground
+
 import numpy as np
 from data_load import remove_connected_components, get_val_dataloader, get_val_transforms
 from metrics import dice_norm_metric, lesion_f1_score, ndsc_aac_metric
 from uncertainty import ensemble_uncertainties_classification
 from scipy import ndimage
 
-from x_unet import XUnet
-from monai.networks.nets import UNet
 from collections import OrderedDict
+import importlib
+
 
 parser = argparse.ArgumentParser(description='Get all command line arguments.')
 # model
 parser.add_argument('--path_model', type=str, default='',
                     help='Specify the path to the trained model')
+parser.add_argument('--path_params', type=str, default='',
+                    help='Specify the path to the model params')
 # data
 parser.add_argument('--path_data', nargs='+', required=True,
                     help='Specify the path to the directory with FLAIR images')
@@ -65,37 +68,22 @@ def main(args):
 
     os.makedirs(args.path_save, exist_ok=True)
 
+    spec = importlib.util.spec_from_file_location("params", args.path_params)
+    params = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(params)
+
     '''' Initialise dataloaders '''
     val_loader = get_val_dataloader(flair_paths=args.path_data,
                                     gts_paths=args.path_gts,
                                     num_workers=args.num_workers,
                                     bm_paths=args.path_bm,
-                                    transforms=get_val_transforms)
+                                    transforms=params.get_val_transforms)
 
     ''' Load trained model '''
-    model = XUnet(dim = 64,
-                 frame_kernel_size = 3,
-                 channels = 1,
-                 out_dim = 2,
-                 attn_dim_head = 32,
-                 attn_heads = 8,
-                 dim_mults = (1, 2, 4, 8),
-                 num_blocks_per_stage = (2, 2, 2, 2),
-                 num_self_attn_per_stage = (0, 0, 0, 1),
-                 nested_unet_depths = (5, 4, 2, 1),
-                 consolidate_upsample_fmaps = True,
-                 weight_standardize = False)
-    roi_size = (64, 64, 64)
-    sw_batch_size = 4
+    model = params.model
 
-    # model = UNet(spatial_dims = 3,
-    #              in_channels = 1,
-    #              out_channels =2,
-    #              channels = (32, 64, 128, 256, 512),
-    #              strides = (2, 2, 2, 2),
-    #              num_res_units = 0)
-    # roi_size = (96, 96, 96)
-    # sw_batch_size = 8
+    roi_size = params.PARAMS['roi_size']
+    sw_batch_size = 4
     
     checkpoint = torch.load(args.path_model, map_location=device)
     checkpoint = OrderedDict({k.replace('model.', '', 1):v for k,v in checkpoint['state_dict'].items()})
@@ -107,7 +95,14 @@ def main(args):
     model.to(device)
     model.eval()
 
+    def predictor(inputs):
+        if inputs.max() > 0.2:
+            return model(inputs)
+        return torch.zeros((sw_batch_size, 2, 64, 64, 64), dtype=inputs.dtype, layout=inputs.layout, device=inputs.device)
+
     act = torch.nn.Softmax(dim=1)
+
+    crop = CropForeground()
 
     ndsc, f1, ndsc_aac = [], [], []
     gt_vol, pred_vol, gt_count, pred_count = [], [], [], []
@@ -127,16 +122,21 @@ def main(args):
                 gt_count.append(len(label_list))
                 gt_vol.append(np.sum(gt))
 
+                inputs = crop(inputs[0][0])
+                inputs = inputs.unsqueeze(0).unsqueeze(0)
+
                 if device == torch.device('cuda'):
                     inputs = inputs.half()
 
                 # get predictions
                 outputs = sliding_window_inference(inputs.to(device), roi_size,
-                                                   sw_batch_size, model,
+                                                   sw_batch_size, predictor,
                                                    mode='gaussian')
 
-                outputs = act(outputs).cpu().numpy().astype(np.float32)
-                outputs = np.squeeze(outputs[0, 1])
+                outputs = act(outputs)
+                outputs.applied_operations = inputs.applied_operations
+                outputs = crop.inverse(outputs[0,1])
+                outputs = outputs.cpu().numpy().astype(np.float32)
 
                 # obtain binary segmentation mask
                 seg = outputs.copy()
