@@ -10,20 +10,20 @@ from monai.transforms import (
     RandRotate90d, RandShiftIntensityd, RandAffined, RandSpatialCropd,
     RandScaleIntensityd, ScaleIntensityd)
 
-# based on xunet-loss-ndsc-lr.py
-
 PARAMS = dict(
 
     # trainining
-    n_epochs=100,
+    n_epochs=50,
     accumulated_batch_size=6,
     batch_size=6,
     
     optimizer=torch.optim.RAdam,
     optimizer_params=dict(lr=1e-3),
     scheduler=torch.optim.lr_scheduler.OneCycleLR,
-    scheduler_params=dict(max_lr=1e-4, div_factor=10, final_div_factor=300, pct_start=0.02),
+    scheduler_params=dict(max_lr=1e-6, div_factor=3, final_div_factor=10, pct_start=0.1),
     monitor=None,
+
+    ckpt='runs/loss100/xunet-loss-ndsc-lr/version_0/models/epoch=70-7810-dice_loss=0.33234.ckpt',
 
     # loss
     loss='weighted sum of dice and focal',
@@ -59,7 +59,7 @@ PARAMS = dict(
 
     # logging
     tb_logs='./runs/loss100',
-    exp_name='xunet-wml-percentage',
+    exp_name='xunet-loss-ndsc-lr-finetune',
     ckpt_monitor='val-eval_in/dice_loss',
     num_images_val=2,
     log_gif_interval=5,

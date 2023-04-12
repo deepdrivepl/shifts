@@ -8,7 +8,9 @@ from monai.transforms import (
     AddChanneld, Compose, LoadImaged, RandCropByPosNegLabeld,
     ToTensord, NormalizeIntensityd, RandFlipd,
     RandRotate90d, RandShiftIntensityd, RandAffined, RandSpatialCropd,
-    RandScaleIntensityd, ScaleIntensityd)
+    RandScaleIntensityd, ScaleIntensityd,
+    RandAdjustContrastd, RandGaussianSmoothd, RandGaussianSharpend,
+    RandHistogramShiftd, RandGibbsNoised)
 
 # based on xunet-loss-ndsc-lr.py
 
@@ -26,7 +28,7 @@ PARAMS = dict(
     monitor=None,
 
     # loss
-    loss='weighted sum of dice and focal',
+    loss='nDSC',
     gamma_focal=2.0,
     dice_weight=0.5,
     focal_weight=5,
@@ -58,8 +60,8 @@ PARAMS = dict(
     multiply_train=40,
 
     # logging
-    tb_logs='./runs/loss100',
-    exp_name='xunet-wml-percentage',
+    tb_logs='./runs/aug',
+    exp_name='xunet-intensity-aug-wml-percentage',
     ckpt_monitor='val-eval_in/dice_loss',
     num_images_val=2,
     log_gif_interval=5,
@@ -112,6 +114,7 @@ def loss_function(outputs, labels):
     loss = loss_fn(outputs, labels)
 
     wml_percentage = torch.sum(labels) / torch.numel(labels)
+    # loss = (1 + wml_percentage) * loss
     loss = (1 + 2 * wml_percentage + 0.5*(wml_percentage>0)) * loss
 
     return {'loss': loss, 'dice_loss': dice_loss.detach().cpu(), 'focal_loss': focal_loss.detach().cpu()}
@@ -122,9 +125,9 @@ def get_train_transforms():
         [
             LoadImaged(keys=["image", "label"]),
             AddChanneld(keys=["image", "label"]),
-            # NormalizeIntensityd(keys=["image"], nonzero=True),
-            RandShiftIntensityd(keys="image", offsets=0.1, prob=1.0),
-            RandScaleIntensityd(keys="image", factors=0.1, prob=1.0),
+            NormalizeIntensityd(keys=["image"], nonzero=True),
+            RandShiftIntensityd(keys="image", offsets=0.1, prob=0.5),
+            RandScaleIntensityd(keys="image", factors=0.1, prob=0.5),
             RandCropByPosNegLabeld(keys=["image", "label"],
                                    label_key="label", image_key="image",
                                    spatial_size=(128, 128, 128), num_samples=1,
@@ -136,11 +139,18 @@ def get_train_transforms():
             RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 1)),
             RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(1, 2)),
             RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 2)),
+
+            RandAdjustContrastd(keys="image", gamma=(0.5, 2.5), prob=0.3),
+            RandGaussianSmoothd(keys="image", prob=0.3),
+            RandGaussianSharpend(keys="image", prob=0.3),
+            RandHistogramShiftd(keys="image", num_control_points=20, prob=0.3),
+            RandGibbsNoised(keys="image", alpha=(0.0, 0.5), prob=0.3),
+
             RandAffined(keys=['image', 'label'], mode=('bilinear', 'nearest'),
                         prob=1.0, spatial_size=(64, 64, 64),
                         rotate_range=(np.pi / 2, np.pi / 2, np.pi / 2),
                         scale_range=(0.3, 0.3, 0.3), padding_mode='border'),
-            ScaleIntensityd(keys="image"),
+            # ScaleIntensityd(keys="image"),
             ToTensord(keys=["image", "label"]),
         ]
     )
@@ -156,8 +166,8 @@ def get_val_transforms(keys=["image", "label"], image_keys=["image"]):
         [
             LoadImaged(keys=keys),
             AddChanneld(keys=keys),
-            # NormalizeIntensityd(keys=image_keys, nonzero=True),
-            ScaleIntensityd(keys=image_keys),
+            NormalizeIntensityd(keys=image_keys, nonzero=True),
+            # ScaleIntensityd(keys=image_keys),
             ToTensord(keys=keys),
         ]
     )
