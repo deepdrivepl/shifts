@@ -170,4 +170,32 @@
 
 # scale loss by the factor related to wml percantage in a sample
 # python mswml/train_pl.py params/xunet-wml-percentage.py
-python mswml/train_pl.py params/xunet-wml-percentage-1.py
+# python mswml/train_pl.py params/xunet-wml-percentage-1.py
+
+
+# try UNet again
+# python mswml/train_pl.py params/model-unet-5.py
+# python mswml/train_pl.py params/model-unet-6.py # bs
+# python mswml/train_pl.py params/model-unet-7.py # CE loss
+# python mswml/train_pl.py params/model-unet-8.py # DiceCE loss
+# python mswml/train_pl.py params/model-unet-9.py # intensity, contrast aug
+# python mswml/train_pl.py params/model-unet-10.py # scale intensity
+# python mswml/train_pl.py params/model-unet-11.py # more epochs
+# python mswml/train_pl.py params/model-unet-12.py # num res units
+# python mswml/train_pl.py params/model-unet-13.py # final lr
+# python mswml/train_pl.py params/model-unet-14.py # size 128
+
+
+# intensity, contrast augs
+# python mswml/train_pl.py params/xunet-intensity-aug.py
+# python mswml/train_pl.py params/xunet-intensity-aug-wml-percentage.py
+# python mswml/train_pl.py params/xunet-intensity-aug-1.py # scale intensity
+# python mswml/train_pl.py params/xunet-intensity-aug-wml-percentage-1.py # scale intensity
+
+# finetune
+# python mswml/train_pl.py params/xunet-loss-ndsc-lr-finetune.py
+
+# classify WML%
+# python mswml/train_pl.py params/xunet-classification.py
+# python mswml/train_pl.py params/xunet-classification-1.py # lr
+python mswml/train_pl.py params/xunet-classification-2.py # 0.03*mse
