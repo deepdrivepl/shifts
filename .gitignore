@@ -7,3 +7,6 @@ __pycache__/
 data/
 runs/
 test_predictions/
+**.ckpt
+**.tar.gz
+**.mha
