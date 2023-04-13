@@ -1,4 +1,3 @@
-
 import SimpleITK
 import numpy as np
 import torch
@@ -6,6 +5,7 @@ from scipy import ndimage
 # from monai.networks.nets import UNet
 from x_unet import XUnet
 from monai.inferers import sliding_window_inference
+from monai.transforms import Compose, ToTensor, EnsureChannelFirst, ScaleIntensity, CropForeground
 from uncertainty import ensemble_uncertainties_classification
 from pathlib import Path
 from collections import OrderedDict
@@ -60,7 +60,7 @@ class XUnet_Algorithm(SegmentationAlgorithm):
                 )
             ),
         )
-        print(torch.__version__)
+
         output_path = Path("/output/images/")
         if not output_path.exists():
             output_path.mkdir()
@@ -84,7 +84,7 @@ class XUnet_Algorithm(SegmentationAlgorithm):
                       nested_unet_depths = (5, 4, 2, 1),
                       consolidate_upsample_fmaps = True,
                       weight_standardize = False)
-        model = torch.compile(model)
+
         checkpoint = torch.load('./model.ckpt', map_location='cpu')
         checkpoint = OrderedDict({k.replace('model.', '', 1):v for k,v in checkpoint['state_dict'].items()})
         model.load_state_dict(checkpoint)
@@ -100,6 +100,17 @@ class XUnet_Algorithm(SegmentationAlgorithm):
         self.th = 0.35
         self.roi_size = (64, 64, 64)
         self.sw_batch_size = 10
+
+        self.transforms = Compose([EnsureChannelFirst(channel_dim='no_channel'),
+                                   ToTensor(),
+                                   CropForeground(),
+                                   ScaleIntensity()])
+
+
+    def predictor(self, inputs):
+        if inputs.max() > 0.2:
+            return self.model(inputs)
+        return torch.zeros((self.sw_batch_size, 2, 64, 64, 64), dtype=inputs.dtype, layout=inputs.layout, device=inputs.device)
 
 
     def process_case(self, *, idx, case):
@@ -140,20 +151,18 @@ class XUnet_Algorithm(SegmentationAlgorithm):
         image = SimpleITK.GetArrayFromImage(input_image)
         image = np.transpose(np.array(image))
 
-        # normalize values
-        mina = image.min()
-        maxa = image.max()
-        image = (image - mina) / (maxa - mina)
-
         with torch.no_grad():
-            image = torch.unsqueeze(torch.unsqueeze(torch.from_numpy(image), axis=0), axis=0)
+            image = self.transforms(image).unsqueeze(0)
 
             if self.device == torch.device('cuda'):
                 image = image.half()
 
-            outputs = sliding_window_inference(image.to(self.device), self.roi_size, self.sw_batch_size, self.model, mode='gaussian')
-            outputs = self.act(outputs).cpu().numpy().astype(np.float32)
-            outputs = np.squeeze(outputs[0,1])
+            outputs = sliding_window_inference(image.to(self.device), self.roi_size, self.sw_batch_size, self.predictor, mode='gaussian')
+
+            outputs = self.act(outputs)
+            outputs.applied_operations = image.applied_operations
+            outputs = self.transforms.inverse(outputs[:,1])[0]
+            outputs = outputs.cpu().numpy().astype(np.float32)
 
         seg = outputs.copy()
         seg[seg>self.th] = 1
