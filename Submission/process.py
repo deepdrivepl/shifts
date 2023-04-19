@@ -5,7 +5,6 @@ from scipy import ndimage
 # from monai.networks.nets import UNet
 from x_unet import XUnet
 from monai.inferers import sliding_window_inference
-from monai.transforms import Compose, ToTensor, EnsureChannelFirst, ScaleIntensity, CropForeground
 from uncertainty import ensemble_uncertainties_classification
 from pathlib import Path
 from collections import OrderedDict
@@ -101,16 +100,6 @@ class XUnet_Algorithm(SegmentationAlgorithm):
         self.roi_size = (64, 64, 64)
         self.sw_batch_size = 10
 
-        self.transforms = Compose([EnsureChannelFirst(channel_dim='no_channel'),
-                                   ToTensor(),
-                                   CropForeground(),
-                                   ScaleIntensity()])
-
-
-    def predictor(self, inputs):
-        if inputs.max() > 0.2:
-            return self.model(inputs)
-        return torch.zeros((self.sw_batch_size, 2, 64, 64, 64), dtype=inputs.dtype, layout=inputs.layout, device=inputs.device)
 
 
     def process_case(self, *, idx, case):
@@ -151,18 +140,20 @@ class XUnet_Algorithm(SegmentationAlgorithm):
         image = SimpleITK.GetArrayFromImage(input_image)
         image = np.transpose(np.array(image))
 
+        # normalize values
+        mina = image.min()
+        maxa = image.max()
+        image = (image - mina) / (maxa - mina)
+
         with torch.no_grad():
-            image = self.transforms(image).unsqueeze(0)
+            image = torch.unsqueeze(torch.unsqueeze(torch.from_numpy(image), axis=0), axis=0)
 
             if self.device == torch.device('cuda'):
                 image = image.half()
 
-            outputs = sliding_window_inference(image.to(self.device), self.roi_size, self.sw_batch_size, self.predictor, mode='gaussian')
-
-            outputs = self.act(outputs)
-            outputs.applied_operations = image.applied_operations
-            outputs = self.transforms.inverse(outputs[:,1])[0]
-            outputs = outputs.cpu().numpy().astype(np.float32)
+            outputs = sliding_window_inference(image.to(self.device), self.roi_size, self.sw_batch_size, self.model, mode='gaussian')
+            outputs = self.act(outputs).cpu().numpy().astype(np.float32)
+            outputs = np.squeeze(outputs[0,1])
 
         seg = outputs.copy()
         seg[seg>self.th] = 1
