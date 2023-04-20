@@ -4,4 +4,4 @@ scikit-learn==1.2.1
 scipy==1.10.0
 scikit-image==0.19.3
 monai==1.1.0
-x-unet
+x-unet==0.3.0
